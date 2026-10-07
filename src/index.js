@@ -73,7 +73,7 @@ function manifest() {
 }
 
 export default {
-  async fetch(request) {
+  async fetch(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -134,26 +134,39 @@ export default {
           { error: "Movie not found" },
           404
         );
-        // API test
-    if (path === "/test-api") {
+      }
+ 
+      return json({
+        meta: movie
+      });
+    }
+        // JAVINFO API test
+    if (path === "/test-javinfo") {
+      const apiKey = env.JAVINFO_API_KEY;
+
+      if (!apiKey) {
+        return json({
+          error: "JAVINFO_API_KEY secret not found"
+        }, 500);
+      }
+
       try {
         const response = await fetch(
-          "https://javdb.com/api/v2/search?q=ipzz&page=1&type=movie",
+          "https://api.javinfo.dev/v1/search?q=SSIS-001",
           {
             headers: {
-              "User-Agent": "Mozilla/5.0",
+              "Authorization": "Bearer " + apiKey,
               "Accept": "application/json"
             }
           }
         );
 
-        const data = await response.text();
+        const text = await response.text();
 
         return json({
           status: response.status,
           ok: response.ok,
-          length: data.length,
-          response: data.substring(0, 3000)
+          response: text.substring(0, 3000)
         });
 
       } catch (error) {
@@ -162,13 +175,6 @@ export default {
         }, 500);
       }
     }
-      }
-
-      return json({
-        meta: movie
-      });
-    }
-
     return json(
       {
         error: "Not found"
