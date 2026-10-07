@@ -3,7 +3,8 @@ function json(data, status = 200) {
     status,
     headers: {
       "content-type": "application/json; charset=UTF-8",
-      "Access-Control-Allow-Origin": "*"
+      "Access-Control-Allow-Origin": "*",
+      "Cache-Control": "public, max-age=3600"
     }
   });
 }
@@ -11,7 +12,7 @@ function json(data, status = 200) {
 function manifest() {
   return {
     id: "com.hasanrabby.javcatalogue",
-    version: "1.2.0",
+    version: "1.3.0",
     name: "JAV Catalogue Free",
     description: "JAV catalogue and metadata addon.",
     resources: ["catalog", "meta"],
@@ -55,6 +56,10 @@ async function javinfo(path, apiKey) {
 }
 
 function getResults(data) {
+  if (Array.isArray(data)) {
+    return data;
+  }
+
   return (
     data.results ||
     data.movies ||
@@ -63,41 +68,205 @@ function getResults(data) {
   );
 }
 
-function makeMeta(item) {
-  const code =
-    item.id ||
-    item.code ||
-    item.movie_id ||
-    item.title ||
-    item.name;
+function first(item, keys) {
+  for (const key of keys) {
+    const value = item?.[key];
 
-  const name =
-    item.code ||
-    item.title ||
-    item.name ||
-    code;
+    if (
+      value !== undefined &&
+      value !== null &&
+      value !== ""
+    ) {
+      return value;
+    }
+  }
+
+  return "";
+}
+
+function cleanArray(value) {
+  if (!value) return [];
+
+  if (Array.isArray(value)) {
+    return value
+      .map(x => {
+        if (typeof x === "string") return x;
+        if (typeof x === "object") {
+          return (
+            x.name ||
+            x.title ||
+            x.text ||
+            x.value ||
+            ""
+          );
+        }
+        return String(x);
+      })
+      .filter(Boolean);
+  }
+
+  if (typeof value === "string") {
+    return value
+      .split(",")
+      .map(x => x.trim())
+      .filter(Boolean);
+  }
+
+  return [];
+}
+
+function makeMeta(item, forcedCode = "") {
+  const code =
+    forcedCode ||
+    first(item, [
+      "code",
+      "id",
+      "movie_id",
+      "movieId"
+    ]);
+
+  const title =
+    first(item, [
+      "title",
+      "name",
+      "movie_title",
+      "movieTitle"
+    ]) || code;
 
   const poster =
-    item.poster ||
-    item.image ||
-    item.cover ||
-    item.thumbnail ||
-    "";
+    first(item, [
+      "poster",
+      "poster_url",
+      "posterUrl",
+      "image",
+      "image_url",
+      "imageUrl",
+      "cover",
+      "cover_url",
+      "thumbnail"
+    ]);
 
-  return {
+  const description =
+    first(item, [
+      "description",
+      "desc",
+      "synopsis",
+      "plot",
+      "summary"
+    ]) ||
+    "JAV catalogue entry";
+
+  const meta = {
     id: "jav:" + code,
     type: "movie",
-    name: name,
+    name: title,
     poster: poster,
-    description:
-      item.description ||
-      item.desc ||
-      "JAV catalogue entry"
+    description: description
   };
+
+  const release = first(item, [
+    "release_date",
+    "releaseDate",
+    "date",
+    "released"
+  ]);
+
+  const runtime = first(item, [
+    "runtime",
+    "duration",
+    "length"
+  ]);
+
+  const studio = first(item, [
+    "studio",
+    "maker",
+    "maker_name",
+    "label",
+    "company"
+  ]);
+
+  const director = first(item, [
+    "director",
+    "director_name"
+  ]);
+
+  const actors = cleanArray(
+    first(item, [
+      "actors",
+      "actresses",
+      "actress",
+      "actor",
+      "performers",
+      "cast"
+    ])
+  );
+
+  const genres = cleanArray(
+    first(item, [
+      "genres",
+      "genre",
+      "tags",
+      "categories"
+    ])
+  );
+
+  if (release) {
+    meta.releaseInfo = String(release);
+  }
+
+  if (runtime) {
+    meta.runtime = String(runtime);
+  }
+
+  if (studio) {
+    meta.studio = String(studio);
+  }
+
+  if (director) {
+    meta.director = String(director);
+  }
+
+  if (actors.length) {
+    meta.cast = actors;
+  }
+
+  if (genres.length) {
+    meta.genre = genres;
+  }
+
+  return meta;
+}
+
+function unwrapMovie(data) {
+  if (!data) return null;
+
+  if (Array.isArray(data)) {
+    return data[0] || null;
+  }
+
+  if (data.movie) {
+    return Array.isArray(data.movie)
+      ? data.movie[0]
+      : data.movie;
+  }
+
+  if (data.data) {
+    return Array.isArray(data.data)
+      ? data.data[0]
+      : data.data;
+  }
+
+  if (data.results) {
+    return Array.isArray(data.results)
+      ? data.results[0]
+      : data.results;
+  }
+
+  return data;
 }
 
 export default {
-  async fetch(request, env) {
+  async fetch(request, env, ctx) {
     const url = new URL(request.url);
     const path = url.pathname;
 
@@ -117,23 +286,6 @@ export default {
       }, 500);
     }
 
-    // One-time movie test
-    if (path === "/test-movie") {
-      try {
-        const data = await javinfo(
-          "/movie?q=SSIS-001",
-          apiKey
-        );
-
-        return json(data);
-
-      } catch (error) {
-        return json({
-          error: error.message
-        }, 500);
-      }
-    }
-
     // SEARCH
     if (
       path === "/catalog/movie/jav.json" ||
@@ -147,6 +299,19 @@ export default {
         ? decodeURIComponent(match[1])
         : "SSIS";
 
+      // Cache search results for 1 hour
+      const cacheKey = new Request(
+        url.toString(),
+        request
+      );
+
+      const cached =
+        await caches.default.match(cacheKey);
+
+      if (cached) {
+        return cached;
+      }
+
       try {
         const data = await javinfo(
           "/query?q=" +
@@ -157,9 +322,20 @@ export default {
 
         const results = getResults(data);
 
-        return json({
-          metas: results.map(makeMeta)
+        const response = json({
+          metas: results.map(item =>
+            makeMeta(item)
+          )
         });
+
+        ctx.waitUntil(
+          caches.default.put(
+            cacheKey,
+            response.clone()
+          )
+        );
+
+        return response;
 
       } catch (error) {
         return json({
@@ -169,7 +345,7 @@ export default {
       }
     }
 
-    // MOVIE METADATA
+    // FULL MOVIE METADATA
     if (
       path.startsWith("/meta/movie/jav:")
     ) {
@@ -183,6 +359,19 @@ export default {
         ""
       );
 
+      // Cache individual movie metadata
+      const cacheKey = new Request(
+        url.toString(),
+        request
+      );
+
+      const cached =
+        await caches.default.match(cacheKey);
+
+      if (cached) {
+        return cached;
+      }
+
       try {
         const data = await javinfo(
           "/movie?q=" +
@@ -190,19 +379,7 @@ export default {
           apiKey
         );
 
-        let item = data;
-
-        if (data.movie) {
-          item = data.movie;
-        } else if (data.data) {
-          item = Array.isArray(data.data)
-            ? data.data[0]
-            : data.data;
-        } else if (data.results) {
-          item = Array.isArray(data.results)
-            ? data.results[0]
-            : data.results;
-        }
+        const item = unwrapMovie(data);
 
         if (!item) {
           return json({
@@ -210,14 +387,24 @@ export default {
           }, 404);
         }
 
-        const meta = makeMeta(item);
+        const meta = makeMeta(
+          item,
+          code
+        );
 
-        return json({
-          meta: {
-            ...meta,
-            id: "jav:" + code
-          }
+        const response = json({
+          meta
         });
+
+        // Cache metadata
+        ctx.waitUntil(
+          caches.default.put(
+            cacheKey,
+            response.clone()
+          )
+        );
+
+        return response;
 
       } catch (error) {
         return json({
