@@ -118,43 +118,31 @@ function cleanArray(value) {
 function makeMeta(item, forcedCode = "") {
   const code =
     forcedCode ||
-    first(item, [
-      "code",
-      "id",
-      "movie_id",
-      "movieId"
-    ]);
+    item.dvdId ||
+    item.code ||
+    item.id ||
+    "";
 
   const title =
-    first(item, [
-      "title",
-      "name",
-      "movie_title",
-      "movieTitle"
-    ]) || code;
+    item.titleEn ||
+    item.titleJa ||
+    item.title ||
+    item.name ||
+    code;
 
   const poster =
-    first(item, [
-      "poster",
-      "poster_url",
-      "posterUrl",
-      "image",
-      "image_url",
-      "imageUrl",
-      "cover",
-      "cover_url",
-      "thumbnail"
-    ]);
+    item.jacketFullUrl ||
+    item.cover ||
+    item.poster ||
+    item.image ||
+    "";
 
   const description =
-    first(item, [
-      "description",
-      "desc",
-      "synopsis",
-      "plot",
-      "summary"
-    ]) ||
-    "JAV catalogue entry";
+    item.description ||
+    item.desc ||
+    item.synopsis ||
+    item.plot ||
+    "";
 
   const meta = {
     id: "jav:" + code,
@@ -164,74 +152,32 @@ function makeMeta(item, forcedCode = "") {
     description: description
   };
 
-  const release = first(item, [
-    "release_date",
-    "releaseDate",
-    "date",
-    "released"
-  ]);
-
-  const runtime = first(item, [
-    "runtime",
-    "duration",
-    "length"
-  ]);
-
-  const studio = first(item, [
-    "studio",
-    "maker",
-    "maker_name",
-    "label",
-    "company"
-  ]);
-
-  const director = first(item, [
-    "director",
-    "director_name"
-  ]);
-
-  const actors = cleanArray(
-    first(item, [
-      "actors",
-      "actresses",
-      "actress",
-      "actor",
-      "performers",
-      "cast"
-    ])
-  );
-
-  const genres = cleanArray(
-    first(item, [
-      "genres",
-      "genre",
-      "tags",
-      "categories"
-    ])
-  );
-
-  if (release) {
-    meta.releaseInfo = String(release);
+  if (item.releaseDate) {
+    meta.releaseInfo = String(item.releaseDate);
   }
 
-  if (runtime) {
-    meta.runtime = String(runtime);
+  if (item.runtimeMins) {
+    meta.runtime = String(item.runtimeMins);
   }
 
-  if (studio) {
-    meta.studio = String(studio);
+  if (Array.isArray(item.makers)) {
+    meta.studio = item.makers.join(", ");
   }
 
-  if (director) {
-    meta.director = String(director);
+  if (item.label) {
+    meta.studio = item.label;
   }
 
-  if (actors.length) {
-    meta.cast = actors;
+  if (Array.isArray(item.actresses)) {
+    meta.cast = item.actresses;
   }
 
-  if (genres.length) {
-    meta.genre = genres;
+  if (Array.isArray(item.categories)) {
+    meta.genre = item.categories;
+  }
+
+  if (item.director) {
+    meta.director = item.director;
   }
 
   return meta;
@@ -240,8 +186,8 @@ function makeMeta(item, forcedCode = "") {
 function unwrapMovie(data) {
   if (!data) return null;
 
-  if (Array.isArray(data)) {
-    return data[0] || null;
+  if (data.result) {
+    return data.result;
   }
 
   if (data.movie) {
