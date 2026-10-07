@@ -211,7 +211,7 @@ function unwrapMovie(data) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const path = decodeURIComponent(url.pathname);
+    const path = url.pathname.replace(/%3A/gi, ":");
 
     // Manifest
     if (
