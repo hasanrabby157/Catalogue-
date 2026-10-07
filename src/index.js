@@ -1,41 +1,3 @@
-const MOVIES = [
-  {
-    id: "jav:SSIS-001",
-    type: "movie",
-    name: "SSIS-001",
-    poster: "https://placehold.co/600x900?text=SSIS-001",
-    description: "JAV catalogue entry"
-  },
-  {
-    id: "jav:SSIS-002",
-    type: "movie",
-    name: "SSIS-002",
-    poster: "https://placehold.co/600x900?text=SSIS-002",
-    description: "JAV catalogue entry"
-  },
-  {
-    id: "jav:IPX-001",
-    type: "movie",
-    name: "IPX-001",
-    poster: "https://placehold.co/600x900?text=IPX-001",
-    description: "JAV catalogue entry"
-  },
-  {
-    id: "jav:IPX-002",
-    type: "movie",
-    name: "IPX-002",
-    poster: "https://placehold.co/600x900?text=IPX-002",
-    description: "JAV catalogue entry"
-  },
-  {
-    id: "jav:ABF-001",
-    type: "movie",
-    name: "ABF-001",
-    poster: "https://placehold.co/600x900?text=ABF-001",
-    description: "JAV catalogue entry"
-  }
-];
-
 function json(data, status = 200) {
   return new Response(JSON.stringify(data), {
     status,
@@ -49,13 +11,12 @@ function json(data, status = 200) {
 function manifest() {
   return {
     id: "com.hasanrabby.javcatalogue",
-    version: "1.0.2",
+    version: "1.1.0",
     name: "JAV Catalogue Free",
-    description: "Simple JAV catalogue and metadata addon.",
+    description: "JAV catalogue and metadata addon.",
     resources: ["catalog", "meta"],
     types: ["movie"],
     idPrefixes: ["jav:"],
-
     catalogs: [
       {
         type: "movie",
@@ -72,6 +33,69 @@ function manifest() {
   };
 }
 
+async function searchJavInfo(query, apiKey) {
+  const response = await fetch(
+    "https://api.javinfo.dev/query?q=" +
+      encodeURIComponent(query) +
+      "&num=20",
+    {
+      headers: {
+        "x-javinfo-key": apiKey,
+        "Accept": "application/json"
+      }
+    }
+  );
+
+  if (!response.ok) {
+    throw new Error(
+      "JAVINFO returned HTTP " + response.status
+    );
+  }
+
+  return await response.json();
+}
+
+function convertResults(data) {
+  const items =
+    data.results ||
+    data.movies ||
+    data.data ||
+    [];
+
+  return items.map((item, index) => {
+    const id =
+      item.id ||
+      item.code ||
+      item.movie_id ||
+      item.title ||
+      ("result-" + index);
+
+    const name =
+      item.code ||
+      item.title ||
+      item.name ||
+      id;
+
+    const poster =
+      item.poster ||
+      item.image ||
+      item.cover ||
+      item.thumbnail ||
+      "";
+
+    return {
+      id: "jav:" + id,
+      type: "movie",
+      name: name,
+      poster: poster,
+      description:
+        item.description ||
+        item.desc ||
+        "JAV catalogue entry"
+    };
+  });
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url);
@@ -85,63 +109,11 @@ export default {
       return json(manifest());
     }
 
-    // Catalogue
+    // Catalogue / Search
     if (
       path === "/catalog/movie/jav.json" ||
       path.startsWith("/catalog/movie/jav/")
     ) {
-      let search = "";
-
-      const match = path.match(
-        /\/search=([^/.]+)/
-      );
-
-      if (match) {
-        search = decodeURIComponent(match[1])
-          .toLowerCase();
-      }
-
-      let results = MOVIES;
-
-      if (search) {
-        results = results.filter(movie =>
-          movie.name
-            .toLowerCase()
-            .includes(search)
-        );
-      }
-
-      return json({
-        metas: results
-      });
-    }
-
-    // Metadata
-    if (
-      path.startsWith("/meta/movie/jav:")
-    ) {
-      const id = path
-        .split("/")
-        .pop()
-        .replace(".json", "");
-
-      const movie = MOVIES.find(
-        item => item.id === id
-      );
-
-      if (!movie) {
-        return json(
-          { error: "Movie not found" },
-          404
-        );
-      }
- 
-      return json({
-        meta: movie
-      });
-    }
-                // JAVINFO search test
-    if (path === "/test-javinfo") {
       const apiKey = env.JAVINFO_API_KEY;
 
       if (!apiKey) {
@@ -150,35 +122,36 @@ export default {
         }, 500);
       }
 
+      const match = path.match(
+        /\/search=([^/.]+)/
+      );
+
+      const search = match
+        ? decodeURIComponent(match[1])
+        : "SSIS";
+
       try {
-        const response = await fetch(
-          "https://api.javinfo.dev/query?q=SSIS-001&num=10",
-          {
-            headers: {
-              "x-javinfo-key": apiKey,
-              "Accept": "application/json"
-            }
-          }
+        const data = await searchJavInfo(
+          search,
+          apiKey
         );
 
-        const text = await response.text();
+        const metas = convertResults(data);
 
         return json({
-          status: response.status,
-          ok: response.ok,
-          response: text.substring(0, 5000)
+          metas
         });
 
       } catch (error) {
         return json({
+          metas: [],
           error: error.message
         }, 500);
       }
     }
+
     return json(
-      {
-        error: "Not found"
-      },
+      { error: "Not found" },
       404
     );
   }
