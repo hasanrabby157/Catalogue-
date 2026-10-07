@@ -12,11 +12,20 @@ function json(data, status = 200) {
 function manifest() {
   return {
     id: "com.hasanrabby.javcatalogue",
-    version: "1.3.0",
+    version: "1.4.0",
     name: "JAV Catalogue Free",
     description: "JAV catalogue and metadata addon.",
-    resources: ["catalog", "meta"],
     types: ["movie"],
+
+    resources: [
+      "catalog",
+      {
+        name: "meta",
+        types: ["movie"],
+        idPrefixes: ["jav:"]
+      }
+    ],
+
     idPrefixes: ["jav:"],
 
     catalogs: [
