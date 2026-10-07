@@ -144,43 +144,31 @@ function makeMeta(item, forcedCode = "") {
     item.plot ||
     "";
 
-  const meta = {
+  return {
     id: "jav:" + code,
     type: "movie",
     name: title,
     poster: poster,
-    description: description
+    description: description,
+
+    releaseInfo: item.releaseDate
+      ? String(item.releaseDate)
+      : undefined,
+
+    runtime: item.runtimeMins
+      ? String(item.runtimeMins)
+      : undefined,
+
+    director: item.director || undefined,
+
+    cast: cleanArray(item.actresses),
+
+    genre: cleanArray(item.categories),
+
+    studio: Array.isArray(item.makers)
+      ? item.makers.join(", ")
+      : (item.label || "")
   };
-
-  if (item.releaseDate) {
-    meta.releaseInfo = String(item.releaseDate);
-  }
-
-  if (item.runtimeMins) {
-    meta.runtime = String(item.runtimeMins);
-  }
-
-  if (Array.isArray(item.makers)) {
-    meta.studio = item.makers.join(", ");
-  }
-
-  if (item.label) {
-    meta.studio = item.label;
-  }
-
-  if (Array.isArray(item.actresses)) {
-    meta.cast = item.actresses;
-  }
-
-  if (Array.isArray(item.categories)) {
-    meta.genre = item.categories;
-  }
-
-  if (item.director) {
-    meta.director = item.director;
-  }
-
-  return meta;
 }
 
 function unwrapMovie(data) {
