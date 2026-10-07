@@ -1,0 +1,18 @@
+{
+  "version": 2,
+  "functions": {
+    "api/[...path].js": {
+      "runtime": "nodejs20.x"
+    }
+  },
+  "routes": [
+    {
+      "src": "/manifest.json",
+      "dest": "/api/manifest"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/api/$1"
+    }
+  ]
+}
