@@ -134,6 +134,34 @@ export default {
           { error: "Movie not found" },
           404
         );
+        // API test
+    if (path === "/test-api") {
+      try {
+        const response = await fetch(
+          "https://javdb.com/api/v2/search?q=ipzz&page=1&type=movie",
+          {
+            headers: {
+              "User-Agent": "Mozilla/5.0",
+              "Accept": "application/json"
+            }
+          }
+        );
+
+        const data = await response.text();
+
+        return json({
+          status: response.status,
+          ok: response.ok,
+          length: data.length,
+          response: data.substring(0, 3000)
+        });
+
+      } catch (error) {
+        return json({
+          error: error.message
+        }, 500);
+      }
+    }
       }
 
       return json({
