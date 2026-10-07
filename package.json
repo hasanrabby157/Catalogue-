@@ -1,0 +1,9 @@
+{
+  "name": "jav-catalogue-free",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Metadata-only JAV catalogue addon for Stremio",
+  "engines": {
+    "node": ">=18"
+  }
+}
