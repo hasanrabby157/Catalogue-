@@ -316,7 +316,9 @@ export default {
         return cached;
       }
 
-      try {
+            try {
+        console.log("META CODE:", code);
+
         const data = await javinfo(
           "/movie?q=" +
           encodeURIComponent(code),
@@ -351,8 +353,11 @@ export default {
         return response;
 
       } catch (error) {
+        console.error("META ERROR:", error);
+
         return json({
-          error: error.message
+          error: error.message,
+          stack: error.stack || ""
         }, 500);
       }
     }
