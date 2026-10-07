@@ -140,7 +140,7 @@ export default {
         meta: movie
       });
     }
-            // JAVINFO API test
+                // JAVINFO search test
     if (path === "/test-javinfo") {
       const apiKey = env.JAVINFO_API_KEY;
 
@@ -152,7 +152,7 @@ export default {
 
       try {
         const response = await fetch(
-          "https://api.javinfo.dev/movie?q=SSIS-001",
+          "https://api.javinfo.dev/query?q=SSIS-001&num=10",
           {
             headers: {
               "x-javinfo-key": apiKey,
