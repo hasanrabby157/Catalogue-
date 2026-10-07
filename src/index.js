@@ -101,6 +101,7 @@ export default {
     const url = new URL(request.url);
     const path = url.pathname;
 
+    // Manifest
     if (
       path === "/" ||
       path === "/manifest.json"
@@ -114,6 +115,23 @@ export default {
       return json({
         error: "JAVINFO_API_KEY secret not found"
       }, 500);
+    }
+
+    // One-time movie test
+    if (path === "/test-movie") {
+      try {
+        const data = await javinfo(
+          "/movie?q=SSIS-001",
+          apiKey
+        );
+
+        return json(data);
+
+      } catch (error) {
+        return json({
+          error: error.message
+        }, 500);
+      }
     }
 
     // SEARCH
