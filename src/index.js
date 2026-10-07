@@ -12,7 +12,7 @@ function json(data, status = 200) {
 function manifest() {
   return {
     id: "com.hasanrabby.javcatalogue",
-    version: "1.4.0",
+    version: "1.5.0",
     name: "JAV Catalogue Free",
     description: "JAV catalogue and metadata addon.",
     types: ["movie"],
@@ -29,6 +29,16 @@ function manifest() {
     idPrefixes: ["jav:"],
 
     catalogs: [
+      {
+        type: "movie",
+        id: "jav2026",
+        name: "🆕 2026 Releases"
+      },
+      {
+        type: "movie",
+        id: "jav2025",
+        name: "📅 2025 Releases"
+      },
       {
         type: "movie",
         id: "jav",
@@ -77,22 +87,6 @@ function getResults(data) {
   );
 }
 
-function first(item, keys) {
-  for (const key of keys) {
-    const value = item?.[key];
-
-    if (
-      value !== undefined &&
-      value !== null &&
-      value !== ""
-    ) {
-      return value;
-    }
-  }
-
-  return "";
-}
-
 function cleanArray(value) {
   if (!value) return [];
 
@@ -100,6 +94,7 @@ function cleanArray(value) {
     return value
       .map(x => {
         if (typeof x === "string") return x;
+
         if (typeof x === "object") {
           return (
             x.name ||
@@ -109,6 +104,7 @@ function cleanArray(value) {
             ""
           );
         }
+
         return String(x);
       })
       .filter(Boolean);
@@ -211,10 +207,16 @@ function unwrapMovie(data) {
 export default {
   async fetch(request, env, ctx) {
     const url = new URL(request.url);
-    const path = url.pathname.replace(/%3A/gi, ":");
-    console.log("DEBUG PATH:", path);
 
-    // Manifest
+    const path =
+      url.pathname.replace(/%3A/gi, ":");
+
+    console.log(
+      "DEBUG PATH:",
+      path
+    );
+
+    // MANIFEST
     if (
       path === "/" ||
       path === "/manifest.json"
@@ -222,55 +224,69 @@ export default {
       return json(manifest());
     }
 
-    const apiKey = env.JAVINFO_API_KEY;
+    const apiKey =
+      env.JAVINFO_API_KEY;
 
     if (!apiKey) {
-      return json({
-        error: "JAVINFO_API_KEY secret not found"
-      }, 500);
+      return json(
+        {
+          error:
+            "JAVINFO_API_KEY secret not found"
+        },
+        500
+      );
     }
 
-    // SEARCH
+    // HOME CATALOGS
     if (
-      path === "/catalog/movie/jav.json" ||
-      path.startsWith("/catalog/movie/jav/")
+      path ===
+        "/catalog/movie/jav2026.json" ||
+      path ===
+        "/catalog/movie/jav2025.json"
     ) {
-      const match = path.match(
-        /\/search=([^/.]+)/
-      );
+      const is2026 =
+        path ===
+        "/catalog/movie/jav2026.json";
 
-      const search = match
-        ? decodeURIComponent(match[1])
-        : "SSIS";
-
-      // Cache search results for 1 hour
-      const cacheKey = new Request(
-        url.toString(),
-        request
-      );
+      const cacheKey =
+        new Request(
+          url.toString()
+        );
 
       const cached =
-        await caches.default.match(cacheKey);
+        await caches.default.match(
+          cacheKey
+        );
 
       if (cached) {
         return cached;
       }
 
       try {
-        const data = await javinfo(
-          "/query?q=" +
-          encodeURIComponent(search) +
-          "&num=20",
-          apiKey
-        );
+        const query =
+          is2026
+            ? "filter[releaseAfter]=2026-01-01"
+            : "filter[releaseAfter]=2025-01-01&filter[releaseBefore]=2025-12-31";
 
-        const results = getResults(data);
+        const data =
+          await javinfo(
+            "/query?" +
+              query +
+              "&num=20",
+            apiKey
+          );
 
-        const response = json({
-          metas: results.map(item =>
-            makeMeta(item)
-          )
-        });
+        const results =
+          getResults(data);
+
+        const response =
+          json({
+            metas:
+              results.map(
+                item =>
+                  makeMeta(item)
+              )
+          });
 
         ctx.waitUntil(
           caches.default.put(
@@ -282,67 +298,78 @@ export default {
         return response;
 
       } catch (error) {
-        return json({
-          metas: [],
-          error: error.message
-        }, 500);
+        console.error(
+          "HOME CATALOG ERROR:",
+          error
+        );
+
+        return json(
+          {
+            metas: [],
+            error: error.message
+          },
+          500
+        );
       }
     }
 
-    // FULL MOVIE METADATA
+    // SEARCH
     if (
-      path.startsWith("/meta/movie/jav:")
+      path ===
+        "/catalog/movie/jav.json" ||
+      path.startsWith(
+        "/catalog/movie/jav/"
+      )
     ) {
-      const rawId = path
-        .split("/")
-        .pop()
-        .replace(".json", "");
+      const match =
+        path.match(
+          /\/search=([^/.]+)/
+        );
 
-      const code = rawId.replace(
-        /^jav:/,
-        ""
-      );
+      const search =
+        match
+          ? decodeURIComponent(
+              match[1]
+            )
+          : "SSIS";
 
-      // Cache individual movie metadata
-      const cacheKey = new Request(
-        url.toString(),
-        request
-      );
+      const cacheKey =
+        new Request(
+          url.toString()
+        );
 
       const cached =
-        await caches.default.match(cacheKey);
+        await caches.default.match(
+          cacheKey
+        );
 
       if (cached) {
         return cached;
       }
 
-            try {
-        console.log("META CODE:", code);
+      try {
+        const data =
+          await javinfo(
+            "/query?q=" +
+              encodeURIComponent(
+                search
+              ) +
+              "&num=20",
+            apiKey
+          );
 
-        const data = await javinfo(
-          "/movie?q=" +
-          encodeURIComponent(code),
-          apiKey
-        );
+        const results =
+          getResults(data);
 
-        const item = unwrapMovie(data);
+        const response =
+          json({
+            metas:
+              results.map(
+                item =>
+                  makeMeta(item)
+              )
+          });
 
-        if (!item) {
-          return json({
-            error: "Movie not found"
-          }, 404);
-        }
-
-        const meta = makeMeta(
-          item,
-          code
-        );
-
-        const response = json({
-          meta
-        });
-
-        // Cache metadata
         ctx.waitUntil(
           caches.default.put(
             cacheKey,
@@ -353,17 +380,123 @@ export default {
         return response;
 
       } catch (error) {
-        console.error("META ERROR:", error);
+        return json(
+          {
+            metas: [],
+            error: error.message
+          },
+          500
+        );
+      }
+    }
 
-        return json({
-          error: error.message,
-          stack: error.stack || ""
-        }, 500);
+    // FULL MOVIE METADATA
+    if (
+      path.startsWith(
+        "/meta/movie/jav:"
+      )
+    ) {
+      const rawId =
+        path
+          .split("/")
+          .pop()
+          .replace(
+            ".json",
+            ""
+          );
+
+      const code =
+        rawId.replace(
+          /^jav:/,
+          ""
+        );
+
+      const cacheKey =
+        new Request(
+          url.toString()
+        );
+
+      const cached =
+        await caches.default.match(
+          cacheKey
+        );
+
+      if (cached) {
+        return cached;
+      }
+
+      try {
+        console.log(
+          "META CODE:",
+          code
+        );
+
+        const data =
+          await javinfo(
+            "/movie?q=" +
+              encodeURIComponent(
+                code
+              ),
+            apiKey
+          );
+
+        const item =
+          unwrapMovie(data);
+
+        if (!item) {
+          return json(
+            {
+              error:
+                "Movie not found"
+            },
+            404
+          );
+        }
+
+        const meta =
+          makeMeta(
+            item,
+            code
+          );
+
+        const response =
+          json({
+            meta
+          });
+
+        ctx.waitUntil(
+          caches.default.put(
+            cacheKey,
+            response.clone()
+          )
+        );
+
+        return response;
+
+      } catch (error) {
+        console.error(
+          "META ERROR:",
+          error
+        );
+
+        return json(
+          {
+            error:
+              error.message,
+            stack:
+              error.stack ||
+              ""
+          },
+          500
+        );
       }
     }
 
     return json(
-      { error: "Not found" },
+      {
+        error:
+          "Not found"
+      },
       404
     );
   }
